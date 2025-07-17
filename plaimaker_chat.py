@@ -2,7 +2,7 @@ import streamlit as st
 import openai
 import json
 import os
-from stats_data import StatsData
+from stats_helpers import StatsHelper
 from dotenv import load_dotenv
 
 # --- Set OpenAI API Key ---
@@ -14,7 +14,7 @@ if not openai_api_key:
 openai.api_key = openai_api_key
 
 # --- Load Data ---
-stats_data = StatsData('stats.csv')
+stats_data = StatsHelper('stats.csv')
 available_stats = stats_data.get_available_stats()
 available_stats_text = ", ".join(available_stats)
 

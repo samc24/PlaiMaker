@@ -3,7 +3,7 @@ import re
 from typing import Optional, Dict, Any, List
 import difflib
 
-class StatsData:
+class StatsHelper:
     def __init__(self, csv_path: str):
         self.df = pd.read_csv(csv_path)
         self.clean_data()
