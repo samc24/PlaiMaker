@@ -1,3 +1,8 @@
+"""
+PlaiMaker Chat: Streamlit app for querying basketball stats using OpenAI function calling and a CSV dataset.
+Loads data, exposes stat/ranking functions, and interacts with users via a chat interface.
+"""
+
 import streamlit as st
 import openai
 import json
@@ -47,8 +52,14 @@ functions = [
     }
 ]
 
-# --- Answer Formatting ---
 def summarize_stat(stats_data):
+    """
+    Format a stat lookup result for display.
+    Args:
+        stats_data (dict): The result from get_stat_from_csv.
+    Returns:
+        str: Human-readable summary or error message.
+    """
     if "error" in stats_data:
         return stats_data["error"]
     player = stats_data["player"]
@@ -59,6 +70,13 @@ def summarize_stat(stats_data):
     return f"{player} recorded {value} {stat}{context_str} according to Hoopalytics data."
 
 def summarize_ranking(ranking_data):
+    """
+    Format a ranking result for display.
+    Args:
+        ranking_data (dict): The result from rank_players_by_stat.
+    Returns:
+        str: Human-readable ranking summary or error message.
+    """
     if "error" in ranking_data:
         return ranking_data["error"]
     stat = ranking_data["stat"]
@@ -71,10 +89,10 @@ def summarize_ranking(ranking_data):
     return summary.strip()
 
 # --- Streamlit App ---
-st.title("PlaiChat 🏀 (With OpenAI Function Calling)")
+st.title("PlaiMaker Chat 🏀 Powered by Hoopsalytics")
 st.markdown("""
 Ask specific or ranking basketball questions from your dataset.
-**Examples:**
+**Examples:**  
 - How many points did AJ Dybansta score?
 - Rank the top scorers.
 """)
@@ -83,6 +101,7 @@ user_query = st.text_input("Your question:")
 
 if user_query:
     with st.spinner("Thinking..."):
+        # Call OpenAI to extract function call arguments from the user query
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
