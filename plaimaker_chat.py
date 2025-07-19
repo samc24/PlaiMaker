@@ -21,9 +21,114 @@ openai.api_key = st.secrets["openai"]["api_key"]
 # openai.api_key = openai_api_key
 
 # --- Load Data ---
-stats_data = StatsHelper('stats.csv')
+stats_data = StatsHelper('stats_all.csv')
 available_stats = stats_data.get_available_stats()
 available_stats_text = ", ".join(available_stats)
+
+# --- Column Descriptions Mapping ---
+column_descriptions = {
+    "Recruiting Profile": "Recruiting Profile (player's recruiting info)",
+    "Player": "Player Name",
+    "Games": "Games Played",
+    "Time": "Minutes Played (hh:mm:ss)",
+    "Events": "Total Events (custom stat)",
+    "EFG%": "Effective Field Goal Percentage",
+    "Pts.": "Points Scored",
+    "Opps.": "Scoring Opportunities",
+    "Ast": "Assists",
+    "TO": "Turnovers",
+    "TO%": "Turnover Percentage",
+    "Reb": "Total Rebounds",
+    "OReb": "Offensive Rebounds",
+    "DReb": "Defensive Rebounds",
+    "Reb%": "Rebound Percentage",
+    "Fouls": "Personal Fouls",
+    "Team Pts.": "Team Points Scored",
+    "Team Pts. Allowed": "Team Points Allowed",
+    "#ERROR!": "Data Error (ignore)",
+    "Off. PPP": "Offensive Points Per Possession",
+    "Def. PPP": "Defensive Points Per Possession",
+    "Net PPP": "Net Points Per Possession (Off - Def)",
+    "VPS": "Value Point Score (custom stat)",
+    "2 Pt Fouls": "Fouls Drawn on 2-Point Attempts",
+    "2Pt": "2-Point Field Goals Made",
+    "2Pt A": "2-Point Field Goals Attempted",
+    "2Pt Fouled": "Fouled on 2-Point Attempt",
+    "2Pt miss": "2-Point Field Goals Missed",
+    "2Pt Rate": "2-Point Attempt Rate",
+    "2Pt%": "2-Point Field Goal Percentage",
+    "3 Pt Fouls": "Fouls Drawn on 3-Point Attempts",
+    "3Pt": "3-Point Field Goals Made",
+    "3Pt A": "3-Point Field Goals Attempted",
+    "3Pt Fouled": "Fouled on 3-Point Attempt",
+    "3Pt miss": "3-Point Field Goals Missed",
+    "3Pt Rate": "3-Point Attempt Rate",
+    "3Pt%": "3-Point Field Goal Percentage",
+    "And-1 Fouls": "And-1 Fouls (made basket + foul)",
+    "Ast%": "Assist Percentage",
+    "ATR %": "Assist-to-Turnover Ratio (Percentage)",
+    "ATR Att.": "Assist-to-Turnover Ratio Attempts",
+    "ATR Fouled": "Fouled on ATR Play (custom stat)",
+    "ATR Made": "ATR Made (custom stat)",
+    "ATR Rate": "ATR Rate (custom stat)",
+    "ATR/A": "Assist-to-Turnover Ratio (per Attempt)",
+    "Blk": "Blocks",
+    "Blk%": "Block Percentage",
+    "Blk/Foul": "Blocks per Foul",
+    "Blkd": "Times Blocked",
+    "Chrg": "Charges Taken",
+    "Cut": "Cuts (custom stat)",
+    "Def Foul": "Defensive Fouls",
+    "Def. 2Pt%": "Opponent 2-Point FG% (Defense)",
+    "Def. 3Pt%": "Opponent 3-Point FG% (Defense)",
+    "Def. Poss.": "Defensive Possessions",
+    "Def. Rtg": "Defensive Rating",
+    "Def. TO": "Defensive Turnovers Forced",
+    "Def. TO%": "Defensive Turnover Percentage",
+    "Deflect": "Deflections",
+    "FT": "Free Throws Made",
+    "FT A": "Free Throws Attempted",
+    "FT miss": "Free Throws Missed",
+    "FT Trips": "Free Throw Trips (custom stat)",
+    "FT Violation": "Free Throw Violations",
+    "FT%": "Free Throw Percentage",
+    "FTF": "Free Throws per Foul (custom stat)",
+    "LB Foul": "Loose Ball Fouls",
+    "Long Mid %": "Long Midrange Field Goal Percentage",
+    "Long Mid Att.": "Long Midrange Field Goals Attempted",
+    "Long Mid Fouled": "Fouled on Long Midrange Shot",
+    "Long Mid Made": "Long Midrange Field Goals Made",
+    "Long Mid Rate": "Long Midrange Attempt Rate",
+    "Long Mid/A": "Long Midrange Attempts per Game",
+    "Lost Tie Up": "Lost Tie-Ups (jump balls lost)",
+    "MPG": "Minutes Per Game",
+    "NS Fouls": "Non-Shooting Fouls",
+    "NS Fouls (Bonus)": "Non-Shooting Fouls (Bonus)",
+    "Off Foul": "Offensive Fouls",
+    "Off. Pace": "Offensive Pace (Possessions per 40 min)",
+    "Off. Poss.": "Offensive Possessions",
+    "Off. Rtg": "Offensive Rating",
+    "Opp DRebs": "Opponent Defensive Rebounds",
+    "Opp ORebs": "Opponent Offensive Rebounds",
+    "Pace": "Game Pace (Possessions per 40 min)",
+    "Poss.": "Total Possessions",
+    "PPG": "Points Per Game",
+    "Short Mid %": "Short Midrange Field Goal Percentage",
+    "Short Mid Att.": "Short Midrange Field Goals Attempted",
+    "Short Mid Fouled": "Fouled on Short Midrange Shot",
+    "Short Mid Made": "Short Midrange Field Goals Made",
+    "Short Mid Rate": "Short Midrange Attempt Rate",
+    "Short Mid/A": "Short Midrange Attempts per Game",
+    "Shots": "Total Shots Attempted",
+    "Stl": "Steals",
+    "Stl%": "Steal Percentage",
+    "Stl/Foul": "Steals per Foul",
+    "Tech Foul": "Technical Fouls",
+    "Tie Up": "Tie-Ups (Jump Balls)",
+    "TS%": "True Shooting Percentage",
+    "Usage %": "Usage Percentage (team possessions used)",
+    # Add any additional columns from the CSV here, using best-guess or mark as 'Unknown/Custom Stat' if unclear
+}
 
 # --- GPT Function Schema ---
 functions = [
@@ -34,7 +139,7 @@ functions = [
             "type": "object",
             "properties": {
                 "player_name": {"type": "string", "description": "Player's full name"},
-                "stat_type": {"type": "string", "description": "Use exactly one of these columns: " + available_stats_text},
+                "stat_type": {"type": "string", "description": "Stat column from the dataset, like 'Pts.' or 'TS%'"},
                 "event_context": {"type": "string", "description": "Optional context like 'after substitution'."}
             },
             "required": ["player_name", "stat_type"]
@@ -99,6 +204,11 @@ Ask specific or ranking basketball questions from your dataset.
 - Rank the top scorers.
 """)
 
+# --- Build column description string for prompt ---
+column_desc_str = "\n".join([
+    f"- {col}: {desc}" for col, desc in column_descriptions.items()
+])
+
 user_query = st.text_input("Your question:")
 
 if user_query:
@@ -110,10 +220,11 @@ if user_query:
                 {
                     "role": "system",
                     "content": (
-                        "You help users retrieve basketball stats from CSV. "
-                        "The available stat columns you must choose from exactly are: " + available_stats_text + ". "
-                        "Only use these names for 'stat_type'. Do not guess other variants like 'Assists' if 'Ast' is present. "
-                        "Examples of valid stat types include: " + available_stats_text + "."
+                        "You help users retrieve basketball stats from a CSV file. "
+                        "The available stat columns are listed below with their descriptions. "
+                        "When a user asks for a stat, infer the best-fit column from the list, even if the user uses synonyms or natural language. "
+                        "Always return the column name that best matches the user's intent.\n" +
+                        column_desc_str
                     )
                 },
                 {"role": "user", "content": user_query}
