@@ -118,4 +118,18 @@ class StatsHelper:
         Returns:
             List[str]: List of stat column names.
         """
-        return self.available_stats 
+        return self.available_stats
+
+    def get_all_stats_for_player(self, player_name: str) -> dict:
+        """
+        Retrieve all available stats for a player from the DataFrame.
+        Args:
+            player_name (str): The player's full name.
+        Returns:
+            dict: Dictionary with all stats for the player or an error message.
+        """
+        filtered = self.df[self.df['Player'].str.lower() == player_name.lower()]
+        if filtered.empty:
+            return {"error": f"Player '{player_name}' not found."}
+        row = filtered.iloc[0].to_dict()
+        return {"player": player_name, "stats": row} 

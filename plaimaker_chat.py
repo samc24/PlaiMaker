@@ -156,6 +156,17 @@ functions = [
             },
             "required": ["stat_type"]
         }
+    },
+    {
+        "name": "get_all_stats_for_player",
+        "description": "Retrieve all available stats for a player from the CSV data.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "player_name": {"type": "string", "description": "Player's full name"}
+            },
+            "required": ["player_name"]
+        }
     }
 ]
 
@@ -195,8 +206,25 @@ def summarize_ranking(ranking_data):
         summary += f"{idx}. {entry['Player']} - {entry[stat]}\n"
     return summary.strip()
 
+def summarize_all_stats(all_stats_data):
+    """
+    Format all stats for a player for display.
+    Args:
+        all_stats_data (dict): The result from get_all_stats_for_player.
+    Returns:
+        str: Human-readable summary or error message.
+    """
+    if "error" in all_stats_data:
+        return all_stats_data["error"]
+    player = all_stats_data["player"]
+    stats = all_stats_data["stats"]
+    summary = f"All stats for {player}:\n"
+    for k, v in stats.items():
+        summary += f"- {k}: {v}\n"
+    return summary.strip()
+
 # --- Streamlit App ---
-st.title("PlaiMaker Chat 🏀 Powered by Hoopsalytics")
+st.title("PlaiMaker Chat 🏀 \nPowered by Hoopsalytics")
 st.markdown("""
 Ask specific or ranking basketball questions from your dataset.
 **Examples:**  
@@ -261,7 +289,10 @@ if user_query:
                     messages=messages
                 )
                 answer = final_response.choices[0].message.content
+            elif function_name == "get_all_stats_for_player":
+                all_stats_result = stats_data.get_all_stats_for_player(**function_args)
+                answer = summarize_all_stats(all_stats_result)
         else:
             answer = "I'm sorry, I can't answer that question yet with the current CSV data."
-    st.write("### 📊 Answer:")
+    st.write("### 📈 Answer:")
     st.write(answer)
