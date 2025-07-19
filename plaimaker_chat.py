@@ -312,14 +312,8 @@ if user_query:
                 
                 IMPORTANT: 
                 - Use exact column names from the list above
-                - Points column is "Pts." (with period)
-                - Assists column is "Ast"
                 - ALWAYS include Player column for identification
                 - Store final result in 'result' variable as a string
-                
-                Example for "players with more than 5 assists and their points":
-                filtered = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']]
-                result = filtered.to_string(index=False)
                 
                 Generate the pandas code:
                 """
@@ -355,8 +349,7 @@ if user_query:
                     For query: {user_query}
                     DataFrame columns: {all_columns}
                     
-                    Write simple pandas code to get the data. Example:
-                    result = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']].to_string()
+                    Write simple pandas code to get the data. Store result in 'result' variable.
                     """
                     
                     fallback_response = openai.chat.completions.create(
@@ -376,36 +369,7 @@ if user_query:
                     
             except Exception as e:
                 print(f"Error: {e}")
-                # Last resort: manual pandas operation
-                try:
-                    if "assist" in user_query.lower() and "point" in user_query.lower():
-                        # Extract number from query
-                        import re
-                        numbers = re.findall(r'\d+', user_query)
-                        assist_threshold = int(numbers[0]) if numbers else 5
-                        
-                        filtered = stats_data.df[stats_data.df['Ast'] > assist_threshold][['Player', 'Pts.', 'Ast']]
-                        if len(filtered) > 0:
-                            result = f"Players with more than {assist_threshold} assists:\n\n"
-                            for _, row in filtered.iterrows():
-                                result += f"**{row['Player']}**\n"
-                                result += f"- Points: {row['Pts.']}\n"
-                                result += f"- Assists: {row['Ast']}\n\n"
-                            
-                            avg_points = filtered['Pts.'].mean()
-                            avg_assists = filtered['Ast'].mean()
-                            result += f"**Summary:**\n"
-                            result += f"- {len(filtered)} players found\n"
-                            result += f"- Average Points: {avg_points:.2f}\n"
-                            result += f"- Average Assists: {avg_assists:.2f}\n"
-                            
-                            answer = result
-                        else:
-                            answer = f"No players found with more than {assist_threshold} assists."
-                    else:
-                        answer = f"Could not process query: {user_query}. Please try rephrasing."
-                except Exception as e2:
-                    answer = f"Error processing query: {str(e2)}"
+                answer = f"Could not process query: {user_query}. Please try rephrasing."
         else:
             # Use function calling approach for single player queries
             response = openai.chat.completions.create(
@@ -466,23 +430,3 @@ if user_query:
     
     st.write("### 📈 Answer:")
     st.write(answer)
-
-# Debug: Print actual column names
-print("Available columns:", list(stats_data.df.columns))
-print("Sample data:")
-print(stats_data.df[['Player', 'Pts.', 'Ast']].head())
-print("Data types:")
-print(stats_data.df[['Player', 'Pts.', 'Ast']].dtypes)
-print("Sample players with assists > 5:")
-high_assist_players = stats_data.df[stats_data.df['Ast'] > 5][['Player', 'Pts.', 'Ast']].head()
-print(high_assist_players)
-
-# Test the exact code that should work
-print("\nTesting exact code that should work:")
-test_code = """
-filtered_df = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']].sort_values('Ast', ascending=False)
-result = filtered_df.to_string(index=False)
-"""
-local_vars = {'df': stats_data.df, 'pd': pd, 'np': np, 'result': None}
-exec(test_code, globals(), local_vars)
-print("Test result:", local_vars['result'])
