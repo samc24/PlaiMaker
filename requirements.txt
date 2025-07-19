@@ -2,5 +2,5 @@ streamlit
 pandas
 openai
 numpy
-dotenv
+python-dotenv
 pandasai
