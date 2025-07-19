@@ -9,8 +9,18 @@ import json
 import os
 from stats_helpers import StatsHelper
 from dotenv import load_dotenv
-from pandasai import SmartDataframe
-from pandasai.llm import OpenAI
+import pandas as pd
+import numpy as np
+
+# Try to import PandasAI, but make it optional
+try:
+    from pandasai import SmartDataframe
+    from pandasai.llm import OpenAI
+    from pandasai import Agent
+    PANDASAI_AVAILABLE = True
+except ImportError:
+    PANDASAI_AVAILABLE = False
+    st.warning("PandasAI not available. Advanced natural language queries will be limited.")
 
 # --- Set OpenAI API Key ---
 load_dotenv()
@@ -25,7 +35,35 @@ available_stats_text = ", ".join(available_stats)
 
 # --- Initialize PandasAI for natural language querying ---
 llm = OpenAI(api_token=openai_api_key)
-smart_df = SmartDataframe(stats_data.df, config={"llm": llm})
+
+# Try Agent approach instead of SmartDataframe
+try:
+    agent = Agent([stats_data.df], config={"llm": llm, "verbose": True})
+    PANDASAI_AGENT_AVAILABLE = True
+except Exception as e:
+    print(f"Agent failed: {e}")
+    PANDASAI_AGENT_AVAILABLE = False
+    # Fallback to SmartDataframe
+    smart_df = SmartDataframe(
+        stats_data.df, 
+        config={
+            "llm": llm,
+            "verbose": True,
+            "enforce_privacy": False,
+            "max_retries": 3,
+            "custom_whitelisted_dependencies": ["pandas", "numpy"],
+            "enable_logging": True,
+            "save_charts": False,
+            "save_logs": False,
+            "system_prompt": f"""You are a data analyst working with basketball statistics. 
+            The DataFrame has these key columns: Player, Pts. (points), Ast (assists), Reb (rebounds), Games, etc.
+            Always use real data from the DataFrame. Never generate fake or example data. 
+            Provide precise, accurate answers based on the actual data available.
+            The 'Pts.' column contains points scored and 'Ast' column contains assists.
+            When accessing data, use df['Pts.'] and df['Ast'] directly.
+            Never say "data not provided" - the data is available in the DataFrame."""
+        }
+    )
 
 # --- Column Descriptions Mapping ---
 column_descriptions = {
@@ -245,68 +283,206 @@ user_query = st.text_input("Your question:")
 
 if user_query:
     with st.spinner("Thinking..."):
-        # First, try function calling approach
-        response = openai.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You help users retrieve basketball stats from a CSV file. "
-                        "The available stat columns are listed below with their descriptions. "
-                        "When a user asks for a stat, infer the best-fit column from the list, even if the user uses synonyms or natural language. "
-                        "Always return the column name that best matches the user's intent.\n" +
-                        column_desc_str
-                    )
-                },
-                {"role": "user", "content": user_query}
-            ],
-            functions=functions,
-            function_call="auto"
-        )
-        message = response.choices[0].message
+        # Check if this is a multi-player filtering query or single player query
+        is_filtering_query = any(keyword in user_query.lower() for keyword in [
+            'more than', 'less than', 'above', 'below', 'over', 'under',
+            'players with', 'list players', 'show players', 'find players',
+            'average', 'rank', 'top', 'bottom', 'filter'
+        ])
         
-        if message.function_call:
-            # Use function calling approach
-            function_name = message.function_call.name
-            function_args = json.loads(message.function_call.arguments)
-            print("FUNCTION ARGS", function_args)
-            
-            if function_name == "get_stat_from_csv":
-                stats_result = stats_data.get_stat_from_csv(**function_args)
-                messages = [
-                    {"role": "system", "content": "You answer basketball stat questions strictly based on provided CSV results."},
-                    {"role": "user", "content": user_query},
-                    {"role": "function", "name": "get_stat_from_csv", "content": json.dumps(stats_result)}
-                ]
-                final_response = openai.chat.completions.create(
-                    model="gpt-4o",
-                    messages=messages
-                )
-                answer = final_response.choices[0].message.content
-            elif function_name == "rank_players_by_stat":
-                ranking_result = stats_data.rank_players_by_stat(**function_args)
-                messages = [
-                    {"role": "system", "content": "You answer basketball stat ranking questions based on CSV results."},
-                    {"role": "user", "content": user_query},
-                    {"role": "function", "name": "rank_players_by_stat", "content": json.dumps(ranking_result)}
-                ]
-                final_response = openai.chat.completions.create(
-                    model="gpt-4o",
-                    messages=messages
-                )
-                answer = final_response.choices[0].message.content
-            elif function_name == "get_all_stats_for_player":
-                all_stats_result = stats_data.get_all_stats_for_player(**function_args)
-                answer = summarize_all_stats(all_stats_result)
-        else:
-            # Fallback to PandasAI for natural language querying
+        if is_filtering_query:
+            # Use direct pandas approach for filtering queries
             try:
-                answer = smart_df.chat(user_query)
-                if answer is None or str(answer).strip() == "":
-                    answer = "I couldn't find a specific answer to your question. Try rephrasing or asking about a specific player or stat."
+                # Get column info for context
+                all_columns = list(stats_data.df.columns)
+                numeric_columns = stats_data.df.select_dtypes(include=[np.number]).columns.tolist()
+                
+                # Direct pandas code generation
+                pandas_prompt = f"""
+                Convert this basketball query to pandas code:
+                Query: {user_query}
+                
+                DataFrame 'df' has these columns: {all_columns}
+                Numeric columns: {numeric_columns}
+                
+                Generate pandas code that:
+                1. Filters the data based on the query conditions
+                2. Selects the relevant columns (ALWAYS include Player and any stats mentioned)
+                3. Returns the result in a readable format
+                
+                IMPORTANT: 
+                - Use exact column names from the list above
+                - Points column is "Pts." (with period)
+                - Assists column is "Ast"
+                - ALWAYS include Player column for identification
+                - Store final result in 'result' variable as a string
+                
+                Example for "players with more than 5 assists and their points":
+                filtered = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']]
+                result = filtered.to_string(index=False)
+                
+                Generate the pandas code:
+                """
+                
+                # Get pandas code from GPT
+                code_response = openai.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "You are a pandas expert. Generate only executable pandas code that returns real data from the DataFrame."},
+                        {"role": "user", "content": pandas_prompt}
+                    ],
+                    max_tokens=300
+                )
+                
+                pandas_code = code_response.choices[0].message.content.strip()
+                print("Generated pandas code:", pandas_code)
+                
+                # Execute the pandas code
+                local_vars = {
+                    'df': stats_data.df, 
+                    'pd': pd, 
+                    'np': np, 
+                    'result': None
+                }
+                
+                exec(pandas_code, globals(), local_vars)
+                
+                if local_vars['result']:
+                    answer = str(local_vars['result'])
+                else:
+                    # Fallback: try a simpler approach
+                    simple_prompt = f"""
+                    For query: {user_query}
+                    DataFrame columns: {all_columns}
+                    
+                    Write simple pandas code to get the data. Example:
+                    result = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']].to_string()
+                    """
+                    
+                    fallback_response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[
+                            {"role": "system", "content": "Generate simple pandas code only."},
+                            {"role": "user", "content": simple_prompt}
+                        ],
+                        max_tokens=200
+                    )
+                    
+                    fallback_code = fallback_response.choices[0].message.content.strip()
+                    print("Fallback code:", fallback_code)
+                    
+                    exec(fallback_code, globals(), local_vars)
+                    answer = str(local_vars['result']) if local_vars['result'] else "No data found."
+                    
             except Exception as e:
-                answer = f"I encountered an error while processing your query: {str(e)}. Try rephrasing your question."
+                print(f"Error: {e}")
+                # Last resort: manual pandas operation
+                try:
+                    if "assist" in user_query.lower() and "point" in user_query.lower():
+                        # Extract number from query
+                        import re
+                        numbers = re.findall(r'\d+', user_query)
+                        assist_threshold = int(numbers[0]) if numbers else 5
+                        
+                        filtered = stats_data.df[stats_data.df['Ast'] > assist_threshold][['Player', 'Pts.', 'Ast']]
+                        if len(filtered) > 0:
+                            result = f"Players with more than {assist_threshold} assists:\n\n"
+                            for _, row in filtered.iterrows():
+                                result += f"**{row['Player']}**\n"
+                                result += f"- Points: {row['Pts.']}\n"
+                                result += f"- Assists: {row['Ast']}\n\n"
+                            
+                            avg_points = filtered['Pts.'].mean()
+                            avg_assists = filtered['Ast'].mean()
+                            result += f"**Summary:**\n"
+                            result += f"- {len(filtered)} players found\n"
+                            result += f"- Average Points: {avg_points:.2f}\n"
+                            result += f"- Average Assists: {avg_assists:.2f}\n"
+                            
+                            answer = result
+                        else:
+                            answer = f"No players found with more than {assist_threshold} assists."
+                    else:
+                        answer = f"Could not process query: {user_query}. Please try rephrasing."
+                except Exception as e2:
+                    answer = f"Error processing query: {str(e2)}"
+        else:
+            # Use function calling approach for single player queries
+            response = openai.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You help users retrieve basketball stats from a CSV file. "
+                            "The available stat columns are listed below with their descriptions. "
+                            "When a user asks for a stat, infer the best-fit column from the list, even if the user uses synonyms or natural language. "
+                            "Always return the column name that best matches the user's intent.\n" +
+                            column_desc_str
+                        )
+                    },
+                    {"role": "user", "content": user_query}
+                ],
+                functions=functions,
+                function_call="auto"
+            )
+            message = response.choices[0].message
+            
+            if message.function_call:
+                # Use function calling approach
+                function_name = message.function_call.name
+                function_args = json.loads(message.function_call.arguments)
+                print("FUNCTION ARGS", function_args)
+                
+                if function_name == "get_stat_from_csv":
+                    stats_result = stats_data.get_stat_from_csv(**function_args)
+                    messages = [
+                        {"role": "system", "content": "You answer basketball stat questions strictly based on provided CSV results."},
+                        {"role": "user", "content": user_query},
+                        {"role": "function", "name": "get_stat_from_csv", "content": json.dumps(stats_result)}
+                    ]
+                    final_response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=messages
+                    )
+                    answer = final_response.choices[0].message.content
+                elif function_name == "rank_players_by_stat":
+                    ranking_result = stats_data.rank_players_by_stat(**function_args)
+                    messages = [
+                        {"role": "system", "content": "You answer basketball stat ranking questions based on CSV results."},
+                        {"role": "user", "content": user_query},
+                        {"role": "function", "name": "rank_players_by_stat", "content": json.dumps(ranking_result)}
+                    ]
+                    final_response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=messages
+                    )
+                    answer = final_response.choices[0].message.content
+                elif function_name == "get_all_stats_for_player":
+                    all_stats_result = stats_data.get_all_stats_for_player(**function_args)
+                    answer = summarize_all_stats(all_stats_result)
+            else:
+                answer = "I couldn't understand your query. Please try asking about a specific player's stats or use filtering terms like 'more than', 'players with', etc."
     
     st.write("### 📈 Answer:")
     st.write(answer)
+
+# Debug: Print actual column names
+print("Available columns:", list(stats_data.df.columns))
+print("Sample data:")
+print(stats_data.df[['Player', 'Pts.', 'Ast']].head())
+print("Data types:")
+print(stats_data.df[['Player', 'Pts.', 'Ast']].dtypes)
+print("Sample players with assists > 5:")
+high_assist_players = stats_data.df[stats_data.df['Ast'] > 5][['Player', 'Pts.', 'Ast']].head()
+print(high_assist_players)
+
+# Test the exact code that should work
+print("\nTesting exact code that should work:")
+test_code = """
+filtered_df = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']].sort_values('Ast', ascending=False)
+result = filtered_df.to_string(index=False)
+"""
+local_vars = {'df': stats_data.df, 'pd': pd, 'np': np, 'result': None}
+exec(test_code, globals(), local_vars)
+print("Test result:", local_vars['result'])
