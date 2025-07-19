@@ -9,7 +9,7 @@ import json
 import os
 from stats_helpers import StatsHelper
 from dotenv import load_dotenv
-from pandasai import PandasAI
+from pandasai import SmartDataframe
 from pandasai.llm import OpenAI
 
 # --- Set OpenAI API Key ---
@@ -25,7 +25,7 @@ available_stats_text = ", ".join(available_stats)
 
 # --- Initialize PandasAI for natural language querying ---
 llm = OpenAI(api_token=openai_api_key)
-pandas_ai = PandasAI(llm, verbose=False)
+smart_df = SmartDataframe(stats_data.df, config={"llm": llm})
 
 # --- Column Descriptions Mapping ---
 column_descriptions = {
@@ -302,7 +302,7 @@ if user_query:
         else:
             # Fallback to PandasAI for natural language querying
             try:
-                answer = pandas_ai.run(stats_data.df, prompt=user_query)
+                answer = smart_df.chat(user_query)
                 if answer is None or str(answer).strip() == "":
                     answer = "I couldn't find a specific answer to your question. Try rephrasing or asking about a specific player or stat."
             except Exception as e:
