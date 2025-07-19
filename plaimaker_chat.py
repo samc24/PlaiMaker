@@ -9,21 +9,23 @@ import json
 import os
 from stats_helpers import StatsHelper
 from dotenv import load_dotenv
+from pandasai import PandasAI
+from pandasai.llm import OpenAI
 
 # --- Set OpenAI API Key ---
 load_dotenv()
 # openai_api_key = os.environ.get("OPENAI_API_KEY")
-openai.api_key = st.secrets["openai"]["api_key"]
-
-# if not openai_api_key:
-#     st.error("OPENAI_API_KEY environment variable not set. Please set it in your environment.")
-#     st.stop()
-# openai.api_key = openai_api_key
+openai_api_key = st.secrets["openai"]["api_key"]
+openai.api_key = openai_api_key
 
 # --- Load Data ---
 stats_data = StatsHelper('stats_all.csv')
 available_stats = stats_data.get_available_stats()
 available_stats_text = ", ".join(available_stats)
+
+# --- Initialize PandasAI for natural language querying ---
+llm = OpenAI(api_token=openai_api_key)
+pandas_ai = PandasAI(llm, verbose=False)
 
 # --- Column Descriptions Mapping ---
 column_descriptions = {
@@ -230,6 +232,8 @@ Ask specific or ranking basketball questions from your dataset.
 **Examples:**  
 - How many points did AJ Dybansta score?
 - Rank the top scorers.
+- Show me all of AJ Dybansta's stats.
+- What's the average points for players with more than 5 assists?
 """)
 
 # --- Build column description string for prompt ---
@@ -241,7 +245,7 @@ user_query = st.text_input("Your question:")
 
 if user_query:
     with st.spinner("Thinking..."):
-        # Call OpenAI to extract function call arguments from the user query
+        # First, try function calling approach
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -261,10 +265,13 @@ if user_query:
             function_call="auto"
         )
         message = response.choices[0].message
+        
         if message.function_call:
+            # Use function calling approach
             function_name = message.function_call.name
             function_args = json.loads(message.function_call.arguments)
             print("FUNCTION ARGS", function_args)
+            
             if function_name == "get_stat_from_csv":
                 stats_result = stats_data.get_stat_from_csv(**function_args)
                 messages = [
@@ -293,6 +300,13 @@ if user_query:
                 all_stats_result = stats_data.get_all_stats_for_player(**function_args)
                 answer = summarize_all_stats(all_stats_result)
         else:
-            answer = "I'm sorry, I can't answer that question yet with the current CSV data."
+            # Fallback to PandasAI for natural language querying
+            try:
+                answer = pandas_ai.run(stats_data.df, prompt=user_query)
+                if answer is None or str(answer).strip() == "":
+                    answer = "I couldn't find a specific answer to your question. Try rephrasing or asking about a specific player or stat."
+            except Exception as e:
+                answer = f"I encountered an error while processing your query: {str(e)}. Try rephrasing your question."
+    
     st.write("### 📈 Answer:")
     st.write(answer)
