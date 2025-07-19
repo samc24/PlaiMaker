@@ -122,7 +122,7 @@ class StatsHelper:
 
     def get_all_stats_for_player(self, player_name: str) -> dict:
         """
-        Retrieve all available stats for a player from the DataFrame.
+        Retrieve all available stats for a player from the DataFrame, excluding recruiting/profile columns and NaN values.
         Args:
             player_name (str): The player's full name.
         Returns:
@@ -132,4 +132,7 @@ class StatsHelper:
         if filtered.empty:
             return {"error": f"Player '{player_name}' not found."}
         row = filtered.iloc[0].to_dict()
-        return {"player": player_name, "stats": row} 
+        # Exclude unwanted columns and NaN values
+        exclude_cols = {'Recruiting Profile', 'Unnamed: 1'}
+        stats = {k: v for k, v in row.items() if k not in exclude_cols and pd.notna(v)}
+        return {"player": player_name, "stats": stats} 
