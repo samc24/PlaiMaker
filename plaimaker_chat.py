@@ -12,11 +12,13 @@ from dotenv import load_dotenv
 
 # --- Set OpenAI API Key ---
 load_dotenv()
-openai_api_key = os.environ.get("OPENAI_API_KEY")
-if not openai_api_key:
-    st.error("OPENAI_API_KEY environment variable not set. Please set it in your environment.")
-    st.stop()
-openai.api_key = openai_api_key
+# openai_api_key = os.environ.get("OPENAI_API_KEY")
+openai.api_key = st.secrets["openai"]["api_key"]
+
+# if not openai_api_key:
+#     st.error("OPENAI_API_KEY environment variable not set. Please set it in your environment.")
+#     st.stop()
+# openai.api_key = openai_api_key
 
 # --- Load Data ---
 stats_data = StatsHelper('stats.csv')
