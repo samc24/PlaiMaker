@@ -1,6 +1,6 @@
 """
-StatsHelper module for basketball statistics data access and manipulation.
-Provides a class to load, clean, and query player stats from a CSV file.
+StatsHelper module for working with basketball statistics data.
+Loads, cleans, and queries player stats from a CSV file.
 """
 
 import pandas as pd
@@ -10,14 +10,13 @@ import difflib
 
 class StatsHelper:
     """
-    Helper class for loading, cleaning, and querying basketball player statistics from a CSV file.
+    Helper class for working with basketball player statistics from a CSV file.
+    Handles data loading, cleaning, and querying.
     """
     def __init__(self, csv_path: str):
         """
         Initialize StatsHelper with the path to a CSV file.
         Loads the data and prepares available stats.
-        Args:
-            csv_path (str): Path to the CSV file containing player stats.
         """
         self.df = pd.read_csv(csv_path)
         self.clean_data()
@@ -28,10 +27,6 @@ class StatsHelper:
     def clean_player_name(self, name: str) -> str:
         """
         Clean a player name by removing jersey numbers and trailing whitespace/newlines.
-        Args:
-            name (str): The raw player name string.
-        Returns:
-            str: The cleaned player name.
         """
         cleaned = re.sub(r'#\d+\s*', '', str(name))
         cleaned = cleaned.split('\n')[0].strip()
@@ -47,10 +42,6 @@ class StatsHelper:
         """
         Normalize a stat type string to the closest matching column in the DataFrame.
         Uses case-insensitive and punctuation-insensitive matching, with fuzzy fallback.
-        Args:
-            stat_type (str): The stat type to normalize.
-        Returns:
-            Optional[str]: The matched column name, or None if not found.
         """
         candidates = self.available_stats
         stat_type_clean = re.sub(r'[^a-zA-Z0-9]', '', stat_type).lower()
@@ -66,13 +57,7 @@ class StatsHelper:
 
     def get_stat_from_csv(self, player_name: str, stat_type: str, event_context: Optional[str] = None) -> Dict[str, Any]:
         """
-        Retrieve a specific stat for a player from the DataFrame.
-        Args:
-            player_name (str): The player's full name.
-            stat_type (str): The stat column to retrieve.
-            event_context (Optional[str]): Optional context for the stat.
-        Returns:
-            Dict[str, Any]: Dictionary with stat result or error message.
+        Get a specific stat for a player from the DataFrame.
         """
         norm_stat = self.normalize_stat_type(stat_type)
         if not norm_stat:
@@ -94,11 +79,6 @@ class StatsHelper:
     def rank_players_by_stat(self, stat_type: str, top_n: int = 5) -> Dict[str, Any]:
         """
         Rank the top players by a given stat.
-        Args:
-            stat_type (str): The stat column to rank by.
-            top_n (int): Number of top players to return.
-        Returns:
-            Dict[str, Any]: Dictionary with ranking or error message.
         """
         norm_stat = self.normalize_stat_type(stat_type)
         if not norm_stat:
@@ -115,18 +95,12 @@ class StatsHelper:
     def get_available_stats(self) -> List[str]:
         """
         Get a list of available stat columns in the DataFrame.
-        Returns:
-            List[str]: List of stat column names.
         """
         return self.available_stats
 
     def get_all_stats_for_player(self, player_name: str) -> dict:
         """
-        Retrieve all available stats for a player from the DataFrame, excluding recruiting/profile columns and NaN values.
-        Args:
-            player_name (str): The player's full name.
-        Returns:
-            dict: Dictionary with all stats for the player or an error message.
+        Get all available stats for a player from the DataFrame, excluding recruiting/profile columns and NaN values.
         """
         filtered = self.df[self.df['Player'].str.lower() == player_name.lower()]
         if filtered.empty:

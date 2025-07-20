@@ -1,6 +1,8 @@
 """
-PlaiMaker - Basketball Stats Query App with AI
-A Streamlit app that uses OpenAI GPT to convert natural language queries into pandas code for basketball statistics.
+PlaiMaker - Basketball Stats Chat
+
+A Streamlit app that lets you ask questions about basketball stats in plain English.
+Uses GPT-4o to convert your questions into data queries automatically.
 """
 
 import streamlit as st
@@ -11,32 +13,33 @@ import json
 import re
 from stats_helpers import StatsHelper
 
-# --- Set OpenAI API Key ---
+# Set up OpenAI API key from Streamlit secrets
 openai_api_key = st.secrets["openai"]["api_key"]
 openai.api_key = openai_api_key
 
-# --- Load Data ---
+# Load the basketball stats data
 @st.cache_data
 def load_data():
-    """Load basketball statistics data."""
+    """Load the basketball statistics dataset."""
     stats_data = StatsHelper('stats_all.csv')
     return stats_data
 
-# --- Helper Functions ---
+# Helper functions
 def clean_generated_code(code):
     """
-    Clean generated pandas code to fix common issues.
+    Clean up the pandas code that GPT generates.
+    Fixes common issues like markdown formatting and per-game calculations.
     """
     if not code:
         return code
     
-    # Remove markdown formatting
+    # Remove markdown code blocks
     if "```python" in code:
         code = code.split("```python")[1].split("```")[0].strip()
     elif "```" in code:
         code = code.split("```")[1].split("```")[0].strip()
     
-    # Fix per-game calculations - replace with total stats
+    # Fix per-game calculations - we want total stats, not per-game
     code = re.sub(r"df\['([^']+)'\]\s*/\s*df\['Games'\]", r"df['\1']", code)
     
     # Fix loop variable naming issues
@@ -52,7 +55,8 @@ def clean_generated_code(code):
 
 def format_query_result(result_text, query):
     """
-    Format the query result to look nice and readable in table format.
+    Format the query results into a nice table.
+    Tries to parse player data and create an HTML table if possible.
     """
     if not result_text or result_text.strip() == "":
         return "No results found for your query."
@@ -165,7 +169,7 @@ def format_query_result(result_text, query):
 
 def create_nice_output(result_text, query):
     """
-    Create a nicely formatted output with query context.
+    Create a nicely formatted output with the query context.
     """
     # Format the main result
     formatted_result = format_query_result(result_text, query)
