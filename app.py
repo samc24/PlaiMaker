@@ -56,7 +56,7 @@ def clean_generated_code(code):
 def format_query_result(result_text, query):
     """
     Format the query results into a nice table.
-    Tries to parse player data and create an HTML table if possible.
+    Tries to parse player data and create a DataFrame if possible.
     """
     if not result_text or result_text.strip() == "":
         return "No results found for your query."
@@ -154,36 +154,32 @@ def format_query_result(result_text, query):
                                 if len(stats_dict) > 1:  # Has player + at least one stat
                                     players_data.append(stats_dict)
         
-        # If we found structured data, create a table
+        # If we found structured data, create a DataFrame
         if players_data:
-            # Create a DataFrame and display as table
+            # Create a DataFrame and return it for st.dataframe
             df_result = pd.DataFrame(players_data)
-            return df_result.to_html(index=False, classes=['table', 'table-striped', 'table-hover'], escape=False)
+            return df_result
         
         # If no structured data found, return formatted text
         return result_text.replace("  ", "\n  ").replace(" - ", "\n  ")
     
     except Exception as e:
         # If formatting fails, return the original with basic cleanup
-        return result_text.replace("  ", "\n  ")
+        return result_text.replace("  ", "\n  ").replace(" - ", "\n  ")
 
-def create_nice_output(result_text, query):
+def create_nice_output(result_data, query):
     """
     Create a nicely formatted output with the query context.
     """
-    # Format the main result
-    formatted_result = format_query_result(result_text, query)
-    
-    # Create the output
-    output = f"""
+    # Create the output header
+    output_header = f"""
 ## 🏀 Basketball Stats Results
 
 **Your Question:** {query}
 
-{formatted_result}
 """
     
-    return output
+    return output_header, result_data
 
 # --- Streamlit App ---
 st.set_page_config(
@@ -192,74 +188,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for better table styling
-st.markdown("""
-<style>
-/* Override any Streamlit default styling */
-.table {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 10px 0;
-    font-family: Arial, sans-serif;
-    background-color: white;
-}
-
-.table th {
-    background-color: #f0f2f6;
-    color: #262730 !important;
-    font-weight: bold;
-    padding: 12px 8px;
-    text-align: left;
-    border-bottom: 2px solid #e0e0e0;
-}
-
-.table td {
-    padding: 10px 8px;
-    border-bottom: 1px solid #e0e0e0;
-    vertical-align: top;
-    color: #262730 !important;
-    background-color: transparent;
-}
-
-.table-striped tbody tr:nth-child(even) {
-    background-color: #f8f9fa;
-}
-
-.table-striped tbody tr:nth-child(odd) {
-    background-color: #ffffff;
-}
-
-.table-hover tbody tr:hover {
-    background-color: #d1ecf1;
-}
-
-.table th:first-child {
-    font-weight: bold;
-    color: #1f77b4 !important;
-}
-
-/* Force text color on all table elements */
-.table td, .table th {
-    color: #262730 !important;
-}
-
-/* Ensure hover state maintains readability */
-.table-hover tbody tr:hover td {
-    color: #262730 !important;
-    background-color: #d1ecf1;
-}
-
-/* Override any Streamlit dataframe styling */
-.dataframe.table td, .dataframe.table th {
-    color: #262730 !important;
-}
-
-/* Additional safety for text readability */
-table.table td, table.table th {
-    color: #262730 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+# No custom CSS needed - using native Streamlit components
 
 st.title("🏀 PlaiMaker Basketball Stats")
 st.markdown("Ask questions about basketball statistics in natural language!")
@@ -308,11 +237,10 @@ if prompt := st.chat_input("Ask about basketball stats..."):
             3. Returns the result in a readable format
 
             CRITICAL OUTPUT FORMAT RULES:
-            - ALWAYS format output as: "PlayerName - Stat1: Value1, Stat2: Value2"
-            - Example: "John Smith - Points: 25, Rebounds: 10"
-            - Use this exact format for ALL players
-            - Include line breaks between players
-            - Store final result in 'result' variable as a string
+            - Return a pandas DataFrame with the filtered results
+            - ALWAYS include Player column and any stats mentioned in the query
+            - Store final result in 'result' variable as a DataFrame
+            - DO NOT format as strings - return the DataFrame directly
 
             CRITICAL RULES: 
             - Use exact column names from the list above
@@ -362,16 +290,14 @@ if prompt := st.chat_input("Ask about basketball stats..."):
 
             EXAMPLE CODE FORMAT:
             # For "players with more than 5 assists":
-            filtered = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']]
-            result = ""
-            for index, row in filtered.iterrows():
-                result += f"{{row['Player']}} - Points: {{row['Pts.']}}, Assists: {{row['Ast']}}\\n"
+            result = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']]
 
             # For "players with more than 50 EFG%":
-            filtered = df[pd.to_numeric(df['EFG%'].str.replace('%', ''), errors='coerce') > 50][['Player', 'Pts.', 'Reb', 'EFG%']]
-            result = ""
-            for index, row in filtered.iterrows():
-                result += f"{{row['Player']}} - Points: {{row['Pts.']}}, Rebounds: {{row['Reb']}}, EFG%: {{row['EFG%']}}\\n"
+            result = df[pd.to_numeric(df['EFG%'].str.replace('%', ''), errors='coerce') > 50][['Player', 'Pts.', 'Reb', 'EFG%']]
+
+            # For "which 7 players had the best def rtg but also an off rtg higher than 110":
+            filtered = df[df['Off RTG'] > 110]
+            result = filtered.nlargest(7, 'Def RTG')[['Player', 'Def RTG', 'Off RTG']]
 
             Generate the pandas code:
             """
@@ -406,6 +332,19 @@ if prompt := st.chat_input("Ask about basketball stats..."):
                 exec(cleaned_code, exec_globals)
                 if 'result' in exec_globals:
                     answer = exec_globals['result']
+                    # If result is a DataFrame, convert to string format for compatibility
+                    if isinstance(answer, pd.DataFrame):
+                        if len(answer) > 0:
+                            result_str = ""
+                            for index, row in answer.iterrows():
+                                result_str += f"{row['Player']}"
+                                for col in answer.columns:
+                                    if col != 'Player':
+                                        result_str += f" - {col}: {row[col]}"
+                                result_str += "\n"
+                            answer = result_str
+                        else:
+                            answer = "No players found matching your criteria."
                 else:
                     raise Exception("No result variable found")
                     
@@ -417,12 +356,12 @@ if prompt := st.chat_input("Ask about basketball stats..."):
                 
                 Write simple pandas code to get the data. 
                 - Always include Player column
-                - Store result in 'result' variable
+                - Store result in 'result' variable as a DataFrame
                 - NEVER calculate per-game averages (use total stats)
                 - For any "more than X [stat]" use: df['[ColumnName]'] > X
                 - For any "averaged more than X [stat]" use: df['[ColumnName]'] > X (NOT df['[ColumnName]'] / df['Games'] > X)
                 - The word "averaged" in queries means total stats, not per-game averages
-                - Format nicely with line breaks, not to_string()
+                - Return DataFrame directly, not formatted strings
                 - Use exact column names from the DataFrame
                 
                 FOR PERCENTAGE COLUMNS (EFG%, FT%, 2Pt%, 3Pt%, etc.):
@@ -432,10 +371,7 @@ if prompt := st.chat_input("Ask about basketball stats..."):
                 
                 Example: 
                 # For "players with more than 5 assists":
-                filtered = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']]
-                result = ""
-                for index, row in filtered.iterrows():
-                    result += f"{{row['Player']}} - Points: {{row['Pts.']}}, Assists: {{row['Ast']}}\\n"
+                result = df[df['Ast'] > 5][['Player', 'Pts.', 'Ast']]
                 
                 Generate the pandas code:
                 """
@@ -465,6 +401,19 @@ if prompt := st.chat_input("Ask about basketball stats..."):
                     exec(fallback_code, exec_globals)
                     if 'result' in exec_globals:
                         answer = exec_globals['result']
+                        # If result is a DataFrame, convert to string format for compatibility
+                        if isinstance(answer, pd.DataFrame):
+                            if len(answer) > 0:
+                                result_str = ""
+                                for index, row in answer.iterrows():
+                                    result_str += f"{row['Player']}"
+                                    for col in answer.columns:
+                                        if col != 'Player':
+                                            result_str += f" - {col}: {row[col]}"
+                                    result_str += "\n"
+                                answer = result_str
+                            else:
+                                answer = "No players found matching your criteria."
                     else:
                         raise Exception("No result variable found in fallback")
                         
@@ -536,14 +485,35 @@ if prompt := st.chat_input("Ask about basketball stats..."):
             answer = "Sorry, I'm having trouble understanding your question. Try asking about specific basketball stats like points, rebounds, assists, or shooting percentages."
         
         # Format the output nicely
-        formatted_answer = create_nice_output(answer, prompt)
+        formatted_result = format_query_result(answer, prompt)
         
         # Display the result
-        if "<table" in formatted_answer:
-            # If it's a table, render as HTML
-            st.write(formatted_answer, unsafe_allow_html=True)
+        if isinstance(formatted_result, pd.DataFrame):
+            # If it's a DataFrame, use st.dataframe for interactive table
+            output_header, _ = create_nice_output(None, prompt)
+            st.markdown(output_header)
+            
+            # Display the interactive dataframe
+            st.dataframe(
+                formatted_result,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Player": st.column_config.TextColumn(
+                        "Player",
+                        width="medium",
+                        help="Player name"
+                    )
+                }
+            )
+            
+            # Show summary stats
+            st.info(f"📊 Found {len(formatted_result)} players matching your criteria")
+            
         else:
             # If it's regular text, use markdown
-            st.markdown(formatted_answer)
+            output_header, _ = create_nice_output(None, prompt)
+            st.markdown(output_header)
+            st.markdown(formatted_result)
         
         st.session_state.messages.append({"role": "assistant", "content": answer}) 
