@@ -539,6 +539,7 @@ if prompt := st.chat_input("Ask about basketball stats..."):
                 - For any "averaged more than X [stat]" use: df['[ColumnName]'] > X (NOT df['[ColumnName]'] / df['Games'] > X)
                 - The word "averaged" in queries means total stats, not per-game averages
                 - Use the exact column names from the DataFrame (case-sensitive)
+                - For player name filtering, use case-insensitive matching: df[df['Player'].str.lower() == 'player_name'.lower()]
 
                 BASKETBALL TERMINOLOGY INFERENCE:
                 - "EFG%" refers to Effective Field Goal Percentage column
@@ -587,6 +588,9 @@ if prompt := st.chat_input("Ask about basketball stats..."):
                 # For "which 7 players had the best def rtg but also an off rtg higher than 110":
                 filtered = df[df['Off RTG'] > 110]
                 result = filtered.nlargest(7, 'Def RTG')[['Player', 'Def RTG', 'Off RTG']]
+
+                # For "how many points did AJ Dybansta score":
+                result = df[df['Player'].str.lower() == 'aj dybansta'.lower()][['Player', 'Pts.']]
 
                 Generate the pandas code:
                 """
@@ -652,6 +656,7 @@ if prompt := st.chat_input("Ask about basketball stats..."):
                     - The word "averaged" in queries means total stats, not per-game averages
                     - Return DataFrame directly, not formatted strings
                     - Use exact column names from the DataFrame
+                    - For player name filtering, use case-insensitive matching: df[df['Player'].str.lower() == 'player_name'.lower()]
                     
                     FOR PERCENTAGE COLUMNS (EFG%, FT%, 2Pt%, 3Pt%, etc.):
                     - These contain strings like "50.2%" 
